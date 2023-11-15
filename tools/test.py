@@ -5,7 +5,9 @@ import os.path as osp
 
 from mmengine.config import Config, DictAction
 from mmengine.runner import Runner
-
+# os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+# os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
 
 def parse_args():
     parser = argparse.ArgumentParser(
