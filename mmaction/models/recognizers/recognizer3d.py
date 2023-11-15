@@ -5,7 +5,10 @@ from torch import Tensor
 from mmaction.registry import MODELS
 from mmaction.utils import OptSampleList
 from .base import BaseRecognizer
-
+import time
+import numpy as np
+runtime_ntu60_test=[]
+FPS_ntu60_test =[]
 
 @MODELS.register_module()
 class Recognizer3D(BaseRecognizer):
@@ -36,6 +39,7 @@ class Recognizer3D(BaseRecognizer):
         # Record the kwargs required by `loss` and `predict`
         loss_predict_kwargs = dict()
 
+
         num_segs = inputs.shape[1]
         # [N, num_crops, C, T, H, W] ->
         # [N * num_crops, C, T, H, W]
@@ -47,6 +51,7 @@ class Recognizer3D(BaseRecognizer):
         inputs = inputs.view((-1, ) + inputs.shape[2:])
 
         # Check settings of test
+        start_time = time.time()
         if test_mode:
             if self.test_cfg is not None:
                 loss_predict_kwargs['fcn_test'] = self.test_cfg.get(
@@ -92,6 +97,14 @@ class Recognizer3D(BaseRecognizer):
                 x = self.backbone(inputs)
                 if self.with_neck:
                     x, _ = self.neck(x)
+
+
+            endtimes = time.time()
+            runtimes = endtimes - start_time
+            FPS = inputs.shape[0]*inputs.shape[2] / runtimes
+            runtime_ntu60_test.append(runtimes)
+            FPS_ntu60_test.append(FPS)
+            #print(f'内部runtimes = {runtimes}, FPS = {FPS},AVG_runtimes = {np.mean(np.array(runtime_ntu60_test[1:]))}, AVG_FPS={np.mean(np.array(FPS_ntu60_test[1:]))},')
 
             return x, loss_predict_kwargs
         else:

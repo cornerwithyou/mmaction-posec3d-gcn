@@ -7,7 +7,7 @@ import sys
 sys.path.append("/work/gyz_Projects/mmaction222/mmaction2/mmaction/models/backbones/focal_func")
 from norm import build_norm_layer
 from basic_block_2d import BasicBlock2D
-from utils import split_voxels, check_repeat, FocalLoss
+from utilsall import split_voxels, check_repeat, FocalLoss
 
 class call_FocalSparseConv(nn.Module):
     def __init__(self, in_channels,out_channels, kernel_size,stride, padding=1,norm_cfg=dict(type="BN1d", eps=1e-3, momentum=0.01), indice_key=None,
@@ -33,8 +33,7 @@ class call_FocalSparseConv(nn.Module):
                 point_cloud_range, voxel_size)
 
     def forward(self, x, batch_dict = {}, fuse_func=None):
-        y = self.conv(x, batch_dict, fuse_func)
-        return y
+        return self.conv(x, batch_dict, fuse_func)
 
 class FocalSparseConv(spconv.SparseModule):
     expansion = 1
@@ -47,7 +46,7 @@ class FocalSparseConv(spconv.SparseModule):
         self.conv = spconv.SubMConv3d(inplanes, planes, kernel_size=kernel_size, stride=1, bias=False, indice_key=indice_key)
         self.bn1 = build_norm_layer(norm_cfg, planes)[1]
         self.relu = nn.ReLU(True)
-        kernel_size = 3
+        # kernel_size = 3
 
         # TODO: max_additional_voxels * 4 -- (x + y + z + whether to use)
         # offset_channels = kernel_size**3
@@ -68,9 +67,9 @@ class FocalSparseConv(spconv.SparseModule):
         self.skip_loss = skip_loss
         self.use_img = use_img
         self.training1 = False
-        self.conv_enlarge = spconv.SparseSequential(spconv.SubMConv3d(inplanes, enlarge_voxel_channels, kernel_size=kernel_size,
-                                    stride=1, padding=1, bias=False, indice_key=indice_key+'_enlarge'),
-                                    build_norm_layer(norm_cfg, enlarge_voxel_channels)[1], nn.ReLU()) if enlarge_voxel_channels>0 else None
+        # self.conv_enlarge = spconv.SparseSequential(spconv.SubMConv3d(inplanes, enlarge_voxel_channels, kernel_size=kernel_size,
+        #                             stride=1, padding=1, bias=False, indice_key=indice_key+'_enlarge'),
+        #                             build_norm_layer(norm_cfg, enlarge_voxel_channels)[1], nn.ReLU()) if enlarge_voxel_channels>0 else None
         in_channels = enlarge_voxel_channels if enlarge_voxel_channels>0 else inplanes
 
         self.conv_imp = spconv.SubMConv3d(in_channels, offset_channels, kernel_size=kernel_size, stride=1, padding=1, bias=False, indice_key=indice_key + '_imp')
@@ -122,19 +121,14 @@ class FocalSparseConv(spconv.SparseModule):
                 box_of_pts_cls_targets.append(inboxes_voxels)
 
             features_fore, indices_fore, features_back, indices_back = split_voxels(x, b, imp3_3d, voxels_3d, self.kernel_offsets, mask_multi=self.mask_multi, topk=self.topk, threshold=self.threshold)
-            #features_fore, indices_fore = x.features,x.indices
+
             voxel_features_fore.append(features_fore)
             voxel_indices_fore.append(indices_fore)
-
             voxel_features_back.append(features_back)
             voxel_indices_back.append(indices_back)
 
         voxel_features_fore = torch.cat(voxel_features_fore+voxel_features_back, dim=0)
         voxel_indices_fore = torch.cat(voxel_indices_fore+voxel_indices_back, dim=0)
-        '''
-        voxel_features_fore = torch.cat(voxel_features_fore, dim=0)
-        voxel_indices_fore = torch.cat(voxel_indices_fore, dim=0)
-        '''
         voxel_indices_fore = voxel_indices_fore.to(torch.int32)
         out = spconv.SparseConvTensor(voxel_features_fore, voxel_indices_fore, x.spatial_shape, x.batch_size)
 
@@ -146,19 +140,15 @@ class FocalSparseConv(spconv.SparseModule):
         return out
 
     def forward(self, x, batch_dict = {}, fuse_func=None):
-        x = spconv.SparseConvTensor.from_dense(x.permute(0,2,3,4,1))
-        spatial_indices = x.indices[:, 1:] * self.voxel_stride
-        #spatial_indices = x.indices[:, 2:] * self.voxel_stride
-        #x_indices = x.indices
-        #x_indices[:, 2:] = spatial_indices
-        voxels_3d = spatial_indices * self.voxel_size + self.point_cloud_range[:3]
+        # spatial_indices = x.indices[:, 1:] * self.voxel_stride
+        # voxels_3d = spatial_indices * self.voxel_size + self.point_cloud_range[:3]
+        voxels_3d = None
         # x_predict = self.conv_enlarge(x) if self.conv_enlarge else x
         # if self.use_img:
         #     x_predict = fuse_func(batch_dict, encoded_voxel=x_predict, layer_name="layer1")
-        # print("x.features.shape", x.dense().shape)
         imp3_3d = self.conv_imp(x).features
 
-        out = self._gen_sparse_features(x, imp3_3d, voxels_3d, batch_dict['gt_boxes'] if self.training1 else None)
+        out = self._gen_sparse_features(x, imp3_3d, voxels_3d, None)
         out = self.conv(out)
 
         # if self.use_img:
@@ -166,6 +156,5 @@ class FocalSparseConv(spconv.SparseModule):
 
         out = out.replace_feature(self.bn1(out.features))
         out = out.replace_feature(self.relu(out.features))
-        out = out.dense()
         return out
         # return out, loss_box_of_pts

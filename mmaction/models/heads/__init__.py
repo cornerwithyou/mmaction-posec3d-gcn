@@ -16,8 +16,9 @@ from .tsn_head import TSNHead
 from .uniformer_head import UniFormerHead
 from .x3d_head import X3DHead
 from .i3d_headhave import spI3DHead
+from .fusionc3dgcn_head import FusionC3DGCN_Head
 __all__ = [
     'BaseHead', 'GCNHead', 'I3DHead', 'MViTHead', 'OmniHead', 'SlowFastHead',
     'TPNHead', 'TRNHead', 'TSMHead', 'TSNAudioHead', 'TSNHead',
-    'TimeSformerHead', 'UniFormerHead', 'RGBPoseHead', 'X3DHead', 'FeatureHead','spI3DHead'
+    'TimeSformerHead', 'UniFormerHead', 'RGBPoseHead', 'X3DHead', 'FeatureHead','spI3DHead', 'FusionC3DGCN_Head'
 ]

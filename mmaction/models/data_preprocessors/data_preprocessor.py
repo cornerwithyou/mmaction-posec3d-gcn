@@ -82,8 +82,13 @@ class ActionDataPreprocessor(BaseDataPreprocessor):
             dict or Tuple[dict]: Data in the same format as the model input.
         """
         data = self.cast_data(data)
+        if isinstance(data, list):
+            data = tuple(data)
         if isinstance(data, dict):
-            return self.forward_onesample(data, training=training)
+            if isinstance(data['inputs'], list) and len(data['inputs'])>1:
+                return self.forward_multisample(data, training=training)
+            else:
+                return self.forward_onesample(data, training=training)
         elif isinstance(data, tuple):
             outputs = []
             for data_sample in data:
@@ -108,6 +113,29 @@ class ActionDataPreprocessor(BaseDataPreprocessor):
         inputs, data_samples = self.preprocess(inputs, data_samples, training)
         data['inputs'] = inputs
         data['data_samples'] = data_samples
+        return data
+
+    def forward_multisample(self, data, training: bool = False) -> dict:
+        """Perform normalization, padding, bgr2rgb conversion and batch
+        augmentation on one data sample.
+
+        Args:
+            data (dict): data sampled from dataloader.
+            training (bool): Whether to enable training time augmentation.
+
+        Returns:
+            dict: Data in the same format as the model input.
+        """
+        inputs, data_samples = data['inputs'], data['data_samples']
+        assert len(data['inputs'])==len(data['data_samples'])
+        inputs_all = []
+        data_samples_all=[]
+        for i in range(len(data['inputs'])):
+            input, data_sample = self.preprocess([inputs[i][0]], [data_samples[i][0]], training)
+            inputs_all.append(input)
+            data_samples_all.append(data_sample)
+        data['inputs'] = inputs_all
+        data['data_samples'] = data_samples_all
         return data
 
     def preprocess(self,

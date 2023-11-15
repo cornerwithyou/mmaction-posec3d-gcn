@@ -333,7 +333,7 @@ class Bottleneck3d(BaseModule):
 
 
 @MODELS.register_module()
-class ResNet3d(BaseModule):
+class resnet3d_quantization(BaseModule):
     """ResNet 3d backbone.
 
     Args:
@@ -894,7 +894,7 @@ class ResNet3d(BaseModule):
                 if isinstance(m, _BatchNorm):
                     m.eval()
 
-
+'''
 @MODELS.register_module()
 class ResNet3dLayer(BaseModule):
     """ResNet 3d Layer.
@@ -960,7 +960,7 @@ class ResNet3dLayer(BaseModule):
                  init_cfg: Optional[Union[Dict, List[Dict]]] = None,
                  **kwargs) -> None:
         super().__init__(init_cfg=init_cfg)
-        self.arch_settings = ResNet3d.arch_settings
+        self.arch_settings = resnet3d_quantization.arch_settings
         assert depth in self.arch_settings
 
         self.make_res_layer = ResNet3d.make_res_layer
@@ -1057,3 +1057,45 @@ class ResNet3dLayer(BaseModule):
             for m in self.modules():
                 if isinstance(m, _BatchNorm):
                     m.eval()
+'''
+
+if __name__ == '__main__':
+    from thop import profile, clever_format
+    import pickle as pkl
+#     main()
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    #input = torch.randn(20,17,48,64,64)
+    #input = input.to(device)
+
+
+
+    #input_all = input_all[0]
+    input = torch.randn(1,17,48,64,64)
+    model = resnet3d_quantization( in_channels=17,
+        base_channels=32,
+        num_stages=3,
+        out_indices=(2, ),
+        stage_blocks=(3, 4, 6),
+        conv1_stride_s=1,
+        pool1_stride_s=1,
+        inflate=(0, 1, 1),
+        spatial_strides=(2, 2, 2),
+        temporal_strides=(1, 1, 2),
+        dilations=(1, 1, 1),).to(device)
+    model=torch.quantization.fuse_modules(model, [['conv1.conv', 'conv1.bn', 'conv1.activate']], inplace = True)
+    model.eval()
+    input = input.to(device)
+    flops ,params = profile(model, inputs=(input,) )
+    flops, params = clever_format([flops, params], '%.3f')
+    num_params = 0
+    num_flops = 0
+    model = model.to(device)
+    for name, param in model.named_parameters():
+        print(f"layer_name:{name}, params:{param.numel()/1e6}M")
+        num_params +=param.numel()#model = model.to(device)
+
+
+    print(f'params:{num_params/1e6}M\n')
+
+    print(f"FLOPS:{num_flops/1e9}G")
+    print(f"params:{num_params/1e6}M")

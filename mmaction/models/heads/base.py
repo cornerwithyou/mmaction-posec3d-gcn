@@ -112,6 +112,8 @@ class BaseHead(BaseModule, metaclass=ABCMeta):
         Returns:
             dict: A dictionary of loss components.
         """
+        if isinstance(data_samples,list) and len(data_samples)>1:
+            data_samples = data_samples[0]
         labels = [x.gt_labels.item for x in data_samples]
         labels = torch.stack(labels).to(cls_scores.device)
         labels = labels.squeeze()
@@ -163,6 +165,8 @@ class BaseHead(BaseModule, metaclass=ABCMeta):
                 by :obj:`ActionDataSample`.
         """
         cls_scores = self(feats, **kwargs)
+        if isinstance(data_samples, list):
+            data_samples = data_samples[0]
         return self.predict_by_feat(cls_scores, data_samples)
 
     def predict_by_feat(self, cls_scores: torch.Tensor,

@@ -2,8 +2,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import spconv.pytorch as spconv
-import pickle
+
 
 class GradCAM:
     """GradCAM class helps create visualization results.
@@ -55,36 +54,12 @@ class GradCAM:
         """
 
         def get_gradients(module, grad_input, grad_output):
-            if isinstance(grad_output[0], spconv.SparseConvTensor):
-                self.target_activations = grad_output[0].dense().detach()
-            elif len(grad_output[0].shape) == 2:
-                nonlocal file_layername
-                with open(f"sparse_file/{file_layername}", 'rb') as f:
-                    data = pickle.load(f)
-                data = data.replace_feature(grad_output[0])
-                self.target_gradients = data.dense().detach()
-            else:
-                self.target_gradients = grad_output[0].detach()
-            print(f"get_gradients done.")
+            self.target_gradients = grad_output[0].detach()
 
-        def get_activations(module, input, output:spconv.SparseConvTensor):
-            # if the shape of outputshape is 2d, then replace bn3 as sparseTensor.
-            # if output is SparseConvTensor
-            if isinstance(output, spconv.SparseConvTensor):
-                self.target_activations = output.dense().clone().detach()
-            elif len(output.shape) == 2:
-                nonlocal file_layername
-                with open(f"sparse_file/{file_layername}", 'rb') as f:
-                    data = pickle.load(f)
-                data = data.replace_feature(output)
-                self.target_activations = data.dense().clone().detach()
-                # self.target_activations = output.clone().detach()
-            else:
-                self.target_activations = output.clone().detach()
-            print(f"get_activations done.")
+        def get_activations(module, input, output):
+            self.target_activations = output.clone().detach()
 
         layer_ls = layer_name.split('/')
-        file_layername = layer_name.replace("/","_")
         prev_module = self.model
         for layer in layer_ls:
             prev_module = prev_module._modules[layer]
@@ -244,11 +219,9 @@ class GradCAM:
         curr_inp = curr_inp.cpu().float()
         #curr_inp =
         #curr_inp /= 255.
-        #alpha=0
 
         # alpha blending
         blended_imgs =  (1 - alpha) * curr_inp+alpha * heatmap
-        #blended_imgs =  heatmap
 
         return blended_imgs
 

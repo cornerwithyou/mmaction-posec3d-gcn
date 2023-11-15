@@ -1,7 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 from mmengine.model.weight_init import normal_init
 from torch import Tensor, nn
-
 from mmaction.registry import MODELS
 from mmaction.utils import ConfigType
 from .base import BaseHead
@@ -47,6 +46,7 @@ class I3DHead(BaseHead):
             self.avg_pool = nn.AdaptiveAvgPool3d((1, 1, 1))
         else:
             self.avg_pool = None
+        self.activate = nn.GELU()
 
     def init_weights(self) -> None:
         """Initiate the parameters from scratch."""
@@ -71,5 +71,6 @@ class I3DHead(BaseHead):
         x = x.view(x.shape[0], -1)
         # [N, in_channels]
         cls_score = self.fc_cls(x)
+        #cls_score = self.activate(cls_score)
         # [N, num_classes]
         return cls_score

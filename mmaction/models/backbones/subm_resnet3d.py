@@ -271,7 +271,7 @@ class Bottleneck3d(BaseModule):
                     self.conv1_stride_s),
             padding=conv1_padding,
             bias=False,
-            conv_cfg=self.conv_cfg if conv1_kernel_size[0]==1 else dict(type='Conv3d'),
+            conv_cfg=dict(type='Conv3d'), #dict(type='sps') if conv1_kernel_size[0]==3 else dict(type='Conv3d'),#self.conv_cfg if conv1_kernel_size[0]==1 else dict(type='Conv3d'),
             norm_cfg=self.norm_cfg,
             act_cfg=self.act_cfg)
 
@@ -284,7 +284,7 @@ class Bottleneck3d(BaseModule):
             padding=conv2_padding,
             dilation=(1, dilation, dilation),
             bias=False,
-            conv_cfg=self.conv_cfg if conv2_kernel_size[0]==1 else dict(type='Conv3d'),
+            conv_cfg=dict(type='sps') ,#self.conv_cfg if conv2_kernel_size[0]==1 else dict(type='Conv3d'),
             norm_cfg=self.norm_cfg,
             act_cfg=self.act_cfg)
 
@@ -293,7 +293,7 @@ class Bottleneck3d(BaseModule):
             planes * self.expansion,
             1,
             bias=False,
-            conv_cfg=self.conv_cfg ,
+            conv_cfg=dict(type='Conv3d'), #self.conv_cfg if self.expansion is None else dict(type='Conv3d'),
             norm_cfg=self.norm_cfg,
             # No activation in the third ConvModule for bottleneck
             act_cfg=None)
@@ -338,7 +338,7 @@ class Bottleneck3d(BaseModule):
                 '''
 
             #out = x
-
+            
             out = self.conv1(x)
             out = self.conv2(out)
             out = self.conv3(out)
@@ -346,6 +346,8 @@ class Bottleneck3d(BaseModule):
             if self.downsample is not None:
                 out = self.pool_out(out)
                 identity = self.downsample(x)
+                #identity = self.pool_out(identity)
+
 
             out = out + identity
             return out
@@ -363,7 +365,7 @@ class Bottleneck3d(BaseModule):
 
 
 @MODELS.register_module()
-class spResNet3d(BaseModule):
+class subm_ResNet3d(BaseModule):
     """ResNet 3d backbone.
 
     Args:
@@ -819,7 +821,7 @@ class spResNet3d(BaseModule):
                     self.conv1_stride_s),
             padding=tuple([(k - 1) // 2 for k in _triple(self.conv1_kernel)]),
             bias=False,
-            conv_cfg=self.conv_cfg,
+            conv_cfg=self.conv_cfg ,#if self.conv_cfg != 'subm_mask' else dict(type='Conv3d'),
             norm_cfg=self.norm_cfg,
             act_cfg=self.act_cfg)
 
@@ -907,8 +909,9 @@ class spResNet3d(BaseModule):
             x = x.dense()
         else:
         '''
+        # print(x.shape)
         x = self.conv1(x)
-
+        # print(x.shape)
         if self.with_pool1:
             x = self.maxpool(x)
         outs = []
@@ -919,6 +922,7 @@ class spResNet3d(BaseModule):
                 x = self.pool2(x)
             if i in self.out_indices:
                 outs.append(x)
+            # print(x.shape)
         if len(outs) == 1:
             return outs[0]
 
@@ -935,7 +939,7 @@ class spResNet3d(BaseModule):
 
 
 @MODELS.register_module()
-class spResNet3dLayer(BaseModule):
+class subm_ResNet3dLayer(BaseModule):
     """ResNet 3d Layer.
 
     Args:
@@ -999,14 +1003,14 @@ class spResNet3dLayer(BaseModule):
                  init_cfg: Optional[Union[Dict, List[Dict]]] = None,
                  **kwargs) -> None:
         super().__init__(init_cfg=init_cfg)
-        self.arch_settings = spResNet3d.arch_settings
+        self.arch_settings = subm_ResNet3d.arch_settings
         assert depth in self.arch_settings
 
-        self.make_res_layer = spResNet3d.make_res_layer
-        self._inflate_conv_params = spResNet3d._inflate_conv_params
-        self._inflate_bn_params = spResNet3d._inflate_bn_params
-        self._inflate_weights = spResNet3d._inflate_weights
-        self._init_weights = spResNet3d._init_weights
+        self.make_res_layer = subm_ResNet3d.make_res_layer
+        self._inflate_conv_params = subm_ResNet3d._inflate_conv_params
+        self._inflate_bn_params = subm_ResNet3d._inflate_bn_params
+        self._inflate_weights = subm_ResNet3d._inflate_weights
+        self._init_weights = subm_ResNet3d._init_weights
 
         self.depth = depth
         self.pretrained = pretrained
@@ -1101,7 +1105,7 @@ class spResNet3dLayer(BaseModule):
 if __name__ == '__main__':
     import torch.cuda.profiler as profiler
     input_data = torch.randn(8,17,48,64,64).cuda()
-    model = spResNet3d().cuda()
+    model = subm_ResNet3d().cuda()
     profiler.start()
     with profiler.record_function("model_inference"):
         output = model(input_data)

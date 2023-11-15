@@ -83,6 +83,7 @@ class CrossEntropyLoss(BaseWeightedLoss):
                 assert 'weight' not in kwargs, \
                     "The key 'weight' already exists."
                 kwargs['weight'] = self.class_weight.to(cls_score.device)
+            #cls_score = F.log_softmax(cls_score, 1)
             loss_cls = F.cross_entropy(cls_score, label, **kwargs)
 
         return loss_cls

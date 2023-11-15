@@ -2,7 +2,7 @@
 import warnings
 from collections import OrderedDict
 from typing import Dict, List, Optional, Sequence, Tuple, Union
-
+import time
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint as cp
@@ -15,7 +15,7 @@ from mmengine.utils.dl_utils.parrots_wrapper import _BatchNorm
 from torch.nn.modules.utils import _ntuple, _triple
 
 from mmaction.registry import MODELS
-
+import spconv.pytorch as spconv
 
 class BasicBlock3d(BaseModule):
     """BasicBlock 3d block for ResNet3D.
@@ -272,19 +272,34 @@ class Bottleneck3d(BaseModule):
             conv_cfg=self.conv_cfg,
             norm_cfg=self.norm_cfg,
             act_cfg=self.act_cfg)
+        print(f"self.conv_cfg = {self.conv_cfg}")
+        if conv2_kernel_size == (1, 3, 3):
+            self.conv2 = ConvModule(
+                planes,
+                planes,
+                conv2_kernel_size,
+                stride=(self.conv2_stride_t, self.conv2_stride_s,
+                        self.conv2_stride_s),
+                padding=conv2_padding,
+                dilation=(1, dilation, dilation),
+                bias=False,
+                conv_cfg={'type': 'subm'},
+                norm_cfg=self.norm_cfg,
+                act_cfg=self.act_cfg)
+        else:
+            self.conv2 = ConvModule(
+                planes,
+                planes,
+                conv2_kernel_size,
+                stride=(self.conv2_stride_t, self.conv2_stride_s,
+                        self.conv2_stride_s),
+                padding=conv2_padding,
+                dilation=(1, dilation, dilation),
+                bias=False,
+                conv_cfg=self.conv_cfg,
+                norm_cfg=self.norm_cfg,
+                act_cfg=self.act_cfg)
 
-        self.conv2 = ConvModule(
-            planes,
-            planes,
-            conv2_kernel_size,
-            stride=(self.conv2_stride_t, self.conv2_stride_s,
-                    self.conv2_stride_s),
-            padding=conv2_padding,
-            dilation=(1, dilation, dilation),
-            bias=False,
-            conv_cfg=self.conv_cfg,
-            norm_cfg=self.norm_cfg,
-            act_cfg=self.act_cfg)
 
         self.conv3 = ConvModule(
             planes,
@@ -311,12 +326,19 @@ class Bottleneck3d(BaseModule):
             identity = x
 
             out = self.conv1(x)
+            print(f"out.shape = {out.shape}")
+            # out = spconv.SparseConvTensor.from_dense(out.permute(0,2,3,4,1))
             out = self.conv2(out)
+            print(f"out.shape = {out.shape}")
+            if self.downsample is not None:
+                out = self.downsample(out)
+            # out = out.dense()
             out = self.conv3(out)
+            print(f"out.shape = {out.shape}")
 
             if self.downsample is not None:
                 identity = self.downsample(x)
-
+            print(f"identity.shape = {identity.shape}")
             out = out + identity
             return out
 
@@ -333,7 +355,7 @@ class Bottleneck3d(BaseModule):
 
 
 @MODELS.register_module()
-class ResNet3d(BaseModule):
+class ResNet3dwithsub(BaseModule):
     """ResNet 3d backbone.
 
     Args:
@@ -414,7 +436,7 @@ class ResNet3d(BaseModule):
                  depth: int = 50,
                  pretrained: Optional[str] = None,
                  stage_blocks: Optional[Tuple] = None,
-                 pretrained2d: bool = False,
+                 pretrained2d: bool = True,
                  in_channels: int = 3,
                  num_stages: int = 4,
                  base_channels: int = 64,
@@ -446,8 +468,6 @@ class ResNet3d(BaseModule):
         super().__init__(init_cfg=init_cfg)
         if depth not in self.arch_settings:
             raise KeyError(f'invalid depth {depth} for resnet')
-        #pretrained = '/work/gyz_Projects/mmaction222/mmaction2/checkpoints/slowonly_r50_8xb16-u48-240e_ntu60-xsub-keypoint_nobackbone.pth'
-
         self.depth = depth
         self.pretrained = pretrained
         self.pretrained2d = pretrained2d
@@ -897,7 +917,7 @@ class ResNet3d(BaseModule):
                     m.eval()
 
 
-@MODELS.register_module()
+# @MODELS.register_module()
 class ResNet3dLayer(BaseModule):
     """ResNet 3d Layer.
 
@@ -962,14 +982,14 @@ class ResNet3dLayer(BaseModule):
                  init_cfg: Optional[Union[Dict, List[Dict]]] = None,
                  **kwargs) -> None:
         super().__init__(init_cfg=init_cfg)
-        self.arch_settings = ResNet3d.arch_settings
+        self.arch_settings = ResNet3dwithsub.arch_settings
         assert depth in self.arch_settings
 
-        self.make_res_layer = ResNet3d.make_res_layer
-        self._inflate_conv_params = ResNet3d._inflate_conv_params
-        self._inflate_bn_params = ResNet3d._inflate_bn_params
-        self._inflate_weights = ResNet3d._inflate_weights
-        self._init_weights = ResNet3d._init_weights
+        self.make_res_layer = ResNet3dwithsub.make_res_layer
+        self._inflate_conv_params = ResNet3dwithsub._inflate_conv_params
+        self._inflate_bn_params = ResNet3dwithsub._inflate_bn_params
+        self._inflate_weights = ResNet3dwithsub._inflate_weights
+        self._init_weights = ResNet3dwithsub._init_weights
 
         self.depth = depth
         self.pretrained = pretrained

@@ -271,7 +271,7 @@ class Bottleneck3d(BaseModule):
                     self.conv1_stride_s),
             padding=conv1_padding,
             bias=False,
-            conv_cfg=dict(type='Conv3d'),#self.conv_cfg if conv1_kernel_size[0]==1 else dict(type='Conv3d'),
+            conv_cfg= dict(type='Conv3d'),##self.conv_cfg if inplanes ==  planes else dict(type='Conv3d'),
             norm_cfg=self.norm_cfg,
             act_cfg=self.act_cfg)
 
@@ -284,7 +284,7 @@ class Bottleneck3d(BaseModule):
             padding=conv2_padding,
             dilation=(1, dilation, dilation),
             bias=False,
-            conv_cfg=self.conv_cfg ,#self.conv_cfg if conv2_kernel_size[0]==1 else dict(type='Conv3d'),
+            conv_cfg=dict(type='spconv'),#self.conv_cfg if planes ==  planes else dict(type='subm'),
             norm_cfg=self.norm_cfg,
             act_cfg=self.act_cfg)
 
@@ -293,7 +293,7 @@ class Bottleneck3d(BaseModule):
             planes * self.expansion,
             1,
             bias=False,
-            conv_cfg=self.conv_cfg if self.expansion is None else dict(type='Conv3d'),
+            conv_cfg=dict(type='Conv3d'),#self.conv_cfg if planes ==  planes * self.expansion else dict(type='Conv3d'),
             norm_cfg=self.norm_cfg,
             # No activation in the third ConvModule for bottleneck
             act_cfg=None)
@@ -345,6 +345,7 @@ class Bottleneck3d(BaseModule):
 
             if self.downsample is not None:
                 out = self.pool_out(out)
+                #identity = self.pool_out(identity)
                 identity = self.downsample(x)
                 #identity = self.pool_out(identity)
 
@@ -365,7 +366,7 @@ class Bottleneck3d(BaseModule):
 
 
 @MODELS.register_module()
-class subm_ResNet3d(BaseModule):
+class stmask_ResNet3d(BaseModule):
     """ResNet 3d backbone.
 
     Args:
@@ -633,7 +634,7 @@ class subm_ResNet3d(BaseModule):
                 stride=(temporal_stride, spatial_stride, spatial_stride),
                 padding=0,
                 bias=False,
-                conv_cfg={'type':'Conv3d'},#conv_cfg,
+                conv_cfg= dict(type='Conv3d'),#conv_cfg if inplanes == planes * block.expansion else dict(type='Conv3d'),
                 norm_cfg=norm_cfg,
                 act_cfg=None)
 
@@ -821,7 +822,7 @@ class subm_ResNet3d(BaseModule):
                     self.conv1_stride_s),
             padding=tuple([(k - 1) // 2 for k in _triple(self.conv1_kernel)]),
             bias=False,
-            conv_cfg=self.conv_cfg ,#if self.conv_cfg != 'subm_mask' else dict(type='Conv3d'),
+            conv_cfg=self.conv_cfg ,#if self.in_channels ==  self.base_channels else dict(type='subm'),
             norm_cfg=self.norm_cfg,
             act_cfg=self.act_cfg)
 
@@ -937,7 +938,7 @@ class subm_ResNet3d(BaseModule):
 
 
 @MODELS.register_module()
-class subm_ResNet3dLayer(BaseModule):
+class stmask_ResNet3dLayer(BaseModule):
     """ResNet 3d Layer.
 
     Args:

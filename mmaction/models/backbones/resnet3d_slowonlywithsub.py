@@ -2,11 +2,11 @@
 from typing import Sequence
 
 from mmaction.registry import MODELS
-from .spresnet3d_slowfast import ResNet3dPathway
+from .resnet3d_slowfastwithsub import ResNet3dPathway
 
 
 @MODELS.register_module()
-class sp_ResNet3dSlowOnly(ResNet3dPathway):
+class ResNet3dSlowOnlywithsub(ResNet3dPathway):
     """SlowOnly backbone based on ResNet3dPathway.
 
     Args:
@@ -27,7 +27,6 @@ class sp_ResNet3dSlowOnly(ResNet3dPathway):
                  pool1_stride_t: int = 1,
                  inflate: Sequence[int] = (0, 0, 1, 1),
                  with_pool2: bool = False,
-                 conv_cfg=dict({'type': "subm"}),
                  **kwargs) -> None:
         super().__init__(
             conv1_kernel=conv1_kernel,
@@ -35,7 +34,6 @@ class sp_ResNet3dSlowOnly(ResNet3dPathway):
             pool1_stride_t=pool1_stride_t,
             inflate=inflate,
             with_pool2=with_pool2,
-            conv_cfg = conv_cfg,
             **kwargs)
 
         assert not self.lateral

@@ -13,9 +13,10 @@ from mmengine.model.weight_init import constant_init, kaiming_init
 from mmengine.runner.checkpoint import _load_checkpoint, load_checkpoint
 from mmengine.utils.dl_utils.parrots_wrapper import _BatchNorm
 from torch.nn.modules.utils import _ntuple, _triple
+import spconv.pytorch as spconv
 
 from mmaction.registry import MODELS
-
+spconv_list = ['spconv', 'subm']
 
 class BasicBlock3d(BaseModule):
     """BasicBlock 3d block for ResNet3D.
@@ -111,7 +112,7 @@ class BasicBlock3d(BaseModule):
             padding=conv1_padding,
             dilation=(1, dilation, dilation),
             bias=False,
-            conv_cfg=self.conv_cfg,
+            conv_cfg=self.conv_cfg ,
             norm_cfg=self.norm_cfg,
             act_cfg=self.act_cfg)
 
@@ -123,12 +124,13 @@ class BasicBlock3d(BaseModule):
                     self.conv2_stride_s),
             padding=conv2_padding,
             bias=False,
-            conv_cfg=self.conv_cfg,
+            conv_cfg=self.conv_cfg ,
             norm_cfg=self.norm_cfg,
             act_cfg=None)
 
         self.downsample = downsample
         self.relu = build_activation_layer(self.act_cfg)
+
 
         if self.non_local:
             self.non_local_block = NonLocal3d(self.conv2.norm.num_features,
@@ -196,7 +198,7 @@ class Bottleneck3d(BaseModule):
         init_cfg (dict or list[dict], optional): Initialization config dict.
             Defaults to None.
     """
-    expansion = 1
+    expansion = 4
 
     def __init__(self,
                  inplanes: int,
@@ -269,7 +271,7 @@ class Bottleneck3d(BaseModule):
                     self.conv1_stride_s),
             padding=conv1_padding,
             bias=False,
-            conv_cfg=self.conv_cfg,
+            conv_cfg=self.conv_cfg if conv1_kernel_size[0]==1 else dict(type='Conv3d'),
             norm_cfg=self.norm_cfg,
             act_cfg=self.act_cfg)
 
@@ -282,7 +284,7 @@ class Bottleneck3d(BaseModule):
             padding=conv2_padding,
             dilation=(1, dilation, dilation),
             bias=False,
-            conv_cfg=self.conv_cfg,
+            conv_cfg=self.conv_cfg if conv2_kernel_size[0]==1 else dict(type='Conv3d'),
             norm_cfg=self.norm_cfg,
             act_cfg=self.act_cfg)
 
@@ -291,12 +293,17 @@ class Bottleneck3d(BaseModule):
             planes * self.expansion,
             1,
             bias=False,
-            conv_cfg=self.conv_cfg,
+            conv_cfg=self.conv_cfg ,
             norm_cfg=self.norm_cfg,
             # No activation in the third ConvModule for bottleneck
             act_cfg=None)
 
         self.downsample = downsample
+        if self.downsample is not None:
+            self.pool_out = nn.MaxPool3d(
+                kernel_size=self.downsample.conv.kernel_size,
+                stride=self.downsample.conv.stride,
+                padding=self.downsample.conv.padding)
         self.relu = build_activation_layer(self.act_cfg)
 
         if self.non_local:
@@ -309,12 +316,35 @@ class Bottleneck3d(BaseModule):
         def _inner_forward(x):
             """Forward wrapper for utilizing checkpoint."""
             identity = x
+            '''
+            if self.conv1.conv_cfg['type'] in spconv_list:
+                x = spconv.SparseConvTensor.from_dense(x.permute(0, 2, 3, 4, 1))
+                x = self.conv1(x)
+                x = x.dense()
+            else:
+                x = self.conv1(x)
+            if self.conv2.conv_cfg['type'] in spconv_list:
+                x = spconv.SparseConvTensor.from_dense(x.permute(0, 2, 3, 4, 1))
+                x = self.conv2(x)
+                x = x.dense()
+            else:
+                x = self.conv2(x)
+            if self.conv3.conv_cfg['type'] in spconv_list:
+                x = spconv.SparseConvTensor.from_dense(x.permute(0, 2, 3, 4, 1))
+                x = self.conv3(x)
+                x = x.dense()
+            else:
+                x = self.conv3(x)
+                '''
+
+            #out = x
 
             out = self.conv1(x)
             out = self.conv2(out)
             out = self.conv3(out)
 
             if self.downsample is not None:
+                out = self.pool_out(out)
                 identity = self.downsample(x)
 
             out = out + identity
@@ -593,14 +623,15 @@ class spResNet3d(BaseModule):
             else (non_local,) * blocks
         assert len(inflate) == blocks and len(non_local) == blocks
         downsample = None
-        if spatial_stride != 1 or inplanes != planes * block.expansion:
+        if spatial_stride != 1 :#or inplanes != planes * block.expansion:
             downsample = ConvModule(
                 inplanes,
                 planes * block.expansion,
                 kernel_size=1,
                 stride=(temporal_stride, spatial_stride, spatial_stride),
+                padding=0,
                 bias=False,
-                conv_cfg=conv_cfg,
+                conv_cfg={'type':'Conv3d'},#conv_cfg,
                 norm_cfg=norm_cfg,
                 act_cfg=None)
 
@@ -788,6 +819,7 @@ class spResNet3d(BaseModule):
                     self.conv1_stride_s),
             padding=tuple([(k - 1) // 2 for k in _triple(self.conv1_kernel)]),
             bias=False,
+            # conv_cfg=dict(type='Conv3d'),
             conv_cfg=self.conv_cfg,
             norm_cfg=self.norm_cfg,
             act_cfg=self.act_cfg)
@@ -869,7 +901,16 @@ class spResNet3d(BaseModule):
             torch.Tensor or tuple[torch.Tensor]: The feature of the input
             samples extracted by the backbone.
         """
+        '''
+        if self.conv1.conv_cfg['type'] in spconv_list:
+            x =  spconv.SparseConvTensor.from_dense(x.permute(0,2,3,4,1))
+            x = self.conv1(x)
+            x = x.dense()
+        else:
+        '''
+        '''在stem layer中作时空重要性激活掩码来分离激活区域和非激活区域'''
         x = self.conv1(x)
+
         if self.with_pool1:
             x = self.maxpool(x)
         outs = []
@@ -1057,3 +1098,15 @@ class spResNet3dLayer(BaseModule):
             for m in self.modules():
                 if isinstance(m, _BatchNorm):
                     m.eval()
+
+
+if __name__ == '__main__':
+    import torch.cuda.profiler as profiler
+    input_data = torch.randn(8,17,48,64,64).cuda()
+    model = spResNet3d().cuda()
+    profiler.start()
+    with profiler.record_function("model_inference"):
+        output = model(input_data)
+    profiler.stop()
+
+    print(profiler.memory_profile(reset=True)[0])

@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Sequence, Tuple, Union
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint as cp
+import copy
 from mmcv.cnn import ConvModule, NonLocal3d, build_activation_layer
 from mmengine.logging import MMLogger
 from mmengine.model import BaseModule, Sequential
@@ -192,7 +193,7 @@ class AAGCN_fusion(BaseModule):
         else:
             self.data_bn = nn.Identity()
 
-        lw_kwargs = [cp.deepcopy(kwargs) for i in range(num_stages)]
+        lw_kwargs = [copy.deepcopy(kwargs) for i in range(num_stages)]
         for k, v in kwargs.items():
             if isinstance(v, tuple) and len(v) == num_stages:
                 for i in range(num_stages):
@@ -672,10 +673,20 @@ class ResNet3d_gcn(BaseModule):
                  non_local_cfg: Dict = dict(),
                  zero_init_residual: bool = True,
                  init_cfg: Optional[Union[Dict, List[Dict]]] = None,
+                 graph_cfg=dict(layout='coco', mode='spatial'),
+                 in_channels_gcn=3,
+                 base_channels_gcn=64,
+                 data_bn_type='MVC',
+                 num_person=2,
+                 num_stages_gcn=10,
+                 inflate_stages=[5, 8],
+                 down_stages=[5, 8],
+                 gcn_attention=False,
                  **kwargs) -> None:
         super().__init__(init_cfg=init_cfg)
         if depth not in self.arch_settings:
             raise KeyError(f'invalid depth {depth} for resnet')
+        pretrained = '/work/gyz_Projects/mmaction222/mmaction2/checkpoints/slowonly_r50_8xb16-u48-240e_ntu60-xsub-keypoint_nobackbone.pth'
         self.depth = depth
         self.pretrained = pretrained
         self.pretrained2d = pretrained2d
@@ -755,16 +766,15 @@ class ResNet3d_gcn(BaseModule):
             self.add_module(layer_name, res_layer)
             self.res_layers.append(layer_name)
 
-        self.gcn = AAGCN_fusion(graph_cfg=dict(layout='coco' if self.in_channels==17 else 'nturgb+d',
-                                                 mode='spatial'),
-                                                 in_channels = 3,
-                                                 base_channels= 64,
-                                                 data_bn_type = 'MVC',
-                                                 num_person = 2,
-                                                 num_stages= 10,
-                                                 inflate_stages = [5, 8],
-                                                 down_stages= [5, 8],
-                                                 gcn_attention=False)
+        self.gcn = AAGCN_fusion(graph_cfg=graph_cfg,
+                                                 in_channels = in_channels_gcn,
+                                                 base_channels= base_channels_gcn,
+                                                 data_bn_type = data_bn_type,
+                                                 num_person = num_person,
+                                                 num_stages = num_stages_gcn,
+                                                 inflate_stages = inflate_stages,
+                                                 down_stages= down_stages,
+                                                 gcn_attention=gcn_attention)
 
         self.feat_dim = self.block.expansion * \
             self.base_channels * 2 ** (len(self.stage_blocks) - 1)
@@ -1138,165 +1148,3 @@ class ResNet3d_gcn(BaseModule):
                     m.eval()
 
 
-@MODELS.register_module()
-class ResNet3dLayer(BaseModule):
-    """ResNet 3d Layer.
-
-    Args:
-        depth (int): Depth of resnet, from {18, 34, 50, 101, 152}.
-        pretrained (str, optional): Name of pretrained model. Defaults to None.
-        pretrained2d (bool): Whether to load pretrained 2D model.
-            Defaults to True.
-        stage (int): The index of Resnet stage. Defaults to 3.
-        base_channels (int): Channel num of stem output features.
-            Defaults to 64.
-        spatial_stride (int): The 1st res block's spatial stride.
-            Defaults to 2.
-        temporal_stride (int): The 1st res block's temporal stride.
-            Defaults to 1.
-        dilation (int): The dilation. Defaults to 1.
-        style (str): 'pytorch' or 'caffe'. If set to 'pytorch', the
-            stride-two layer is the 3x3 conv layer, otherwise the stride-two
-            layer is the first 1x1 conv layer. Defaults to ``'pytorch'``.
-        all_frozen (bool): Frozen all modules in the layer. Defaults to False.
-        inflate (int): Inflate dims of each block. Defaults to 1.
-        inflate_style (str): ``3x1x1`` or ``3x3x3``. which determines the
-            kernel sizes and padding strides for conv1 and conv2 in each block.
-            Defaults to ``'3x1x1'``.
-        conv_cfg (dict): Config for conv layers.
-            Required keys are ``type``. Defaults to ``dict(type='Conv3d')``.
-        norm_cfg (dict): Config for norm layers.
-            Required keys are ``type`` and ``requires_grad``.
-            Defaults to ``dict(type='BN3d', requires_grad=True)``.
-        act_cfg (dict): Config dict for activation layer.
-            Defaults to ``dict(type='ReLU', inplace=True)``.
-        norm_eval (bool): Whether to set BN layers to eval mode, namely, freeze
-            running stats (``mean`` and ``var``). Defaults to False.
-        with_cp (bool): Use checkpoint or not. Using checkpoint will save some
-            memory while slowing down the training speed. Defaults to False.
-        zero_init_residual (bool):
-            Whether to use zero initialization for residual block,
-            Defaults to True.
-        init_cfg (dict or list[dict], optional): Initialization config dict.
-            Defaults to None.
-    """
-
-    def __init__(self,
-                 depth: int,
-                 pretrained: Optional[str] = None,
-                 pretrained2d: bool = True,
-                 stage: int = 3,
-                 base_channels: int = 64,
-                 spatial_stride: int = 2,
-                 temporal_stride: int = 1,
-                 dilation: int = 1,
-                 style: str = 'pytorch',
-                 all_frozen: bool = False,
-                 inflate: int = 1,
-                 inflate_style: str = '3x1x1',
-                 conv_cfg: Dict = dict(type='Conv3d'),
-                 norm_cfg: Dict = dict(type='BN3d', requires_grad=True),
-                 act_cfg: Dict = dict(type='ReLU', inplace=True),
-                 norm_eval: bool = False,
-                 with_cp: bool = False,
-                 zero_init_residual: bool = True,
-                 init_cfg: Optional[Union[Dict, List[Dict]]] = None,
-                 **kwargs) -> None:
-        super().__init__(init_cfg=init_cfg)
-        self.arch_settings = ResNet3d_gcn.arch_settings
-        assert depth in self.arch_settings
-
-        self.make_res_layer = ResNet3d_gcn.make_res_layer
-        self._inflate_conv_params = ResNet3d_gcn._inflate_conv_params
-        self._inflate_bn_params = ResNet3d_gcn._inflate_bn_params
-        self._inflate_weights = ResNet3d_gcn._inflate_weights
-        self._init_weights = ResNet3d_gcn._init_weights
-
-        self.depth = depth
-        self.pretrained = pretrained
-        self.pretrained2d = pretrained2d
-        self.stage = stage
-        # stage index is 0 based
-        assert 0 <= stage <= 3
-        self.base_channels = base_channels
-
-        self.spatial_stride = spatial_stride
-        self.temporal_stride = temporal_stride
-        self.dilation = dilation
-
-        self.style = style
-        self.all_frozen = all_frozen
-
-        self.stage_inflation = inflate
-        self.inflate_style = inflate_style
-        self.conv_cfg = conv_cfg
-        self.norm_cfg = norm_cfg
-        self.act_cfg = act_cfg
-        self.norm_eval = norm_eval
-        self.with_cp = with_cp
-        self.zero_init_residual = zero_init_residual
-
-        block, stage_blocks = self.arch_settings[depth]
-        stage_block = stage_blocks[stage]
-        planes = 64 * 2**stage
-        inplanes = 64 * 2**(stage - 1) * block.expansion
-
-        res_layer = self.make_res_layer(
-            block,
-            inplanes,
-            planes,
-            stage_block,
-            spatial_stride=spatial_stride,
-            temporal_stride=temporal_stride,
-            dilation=dilation,
-            style=self.style,
-            norm_cfg=self.norm_cfg,
-            conv_cfg=self.conv_cfg,
-            act_cfg=self.act_cfg,
-            inflate=self.stage_inflation,
-            inflate_style=self.inflate_style,
-            with_cp=with_cp,
-            **kwargs)
-
-        self.layer_name = f'layer{stage + 1}'
-        self.add_module(self.layer_name, res_layer)
-
-    def inflate_weights(self, logger: MMLogger) -> None:
-        """Inflate weights."""
-        self._inflate_weights(self, logger)
-
-    def _freeze_stages(self) -> None:
-        """Prevent all the parameters from being optimized before
-        ``self.frozen_stages``."""
-        if self.all_frozen:
-            layer = getattr(self, self.layer_name)
-            layer.eval()
-            for param in layer.parameters():
-                param.requires_grad = False
-
-    def init_weights(self, pretrained: Optional[str] = None) -> None:
-        """Initialize weights."""
-        self._init_weights(self, pretrained)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Defines the computation performed at every call.
-
-        Args:
-            x (torch.Tensor): The input data.
-
-        Returns:
-            torch.Tensor: The feature of the input
-                samples extracted by the residual layer.
-        """
-        res_layer = getattr(self, self.layer_name)
-        out = res_layer(x)
-        return out
-
-    def train(self, mode: bool = True) -> None:
-        """Set the optimization status when training."""
-        super().train(mode)
-        self._freeze_stages()
-        if mode and self.norm_eval:
-            for m in self.modules():
-                if isinstance(m, _BatchNorm):
-                    m.eval()
