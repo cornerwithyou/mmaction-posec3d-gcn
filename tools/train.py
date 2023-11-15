@@ -6,6 +6,9 @@ import os.path as osp
 from mmengine.config import Config, DictAction
 from mmengine.runner import Runner
 
+# set train gpu is 1
+# os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a action recognizer')

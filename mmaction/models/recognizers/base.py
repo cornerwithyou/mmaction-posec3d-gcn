@@ -254,6 +254,8 @@ class BaseRecognizer(BaseModel, metaclass=ABCMeta):
             - If ``mode="predict"``, return a list of ``ActionDataSample``.
             - If ``mode="loss"``, return a dict of tensor.
         """
+        #if isinstance(data_samples, ActionDataSample):
+
         if mode == 'tensor':
             return self._forward(inputs, **kwargs)
         if mode == 'predict':

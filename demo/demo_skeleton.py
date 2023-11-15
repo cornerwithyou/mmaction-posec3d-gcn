@@ -8,7 +8,9 @@ import mmengine
 import torch
 from mmengine import DictAction
 from mmengine.utils import track_iter_progress
-
+import os
+import sys
+sys.path.append("/work/gyz_Projects/mmaction222/mmaction2/")
 from mmaction.apis import (detection_inference, inference_skeleton,
                            init_recognizer, pose_inference)
 from mmaction.registry import VISUALIZERS
@@ -133,30 +135,37 @@ def main():
 
     h, w, _ = frames[0].shape
 
-    # Get Human detection results.
-    det_results, _ = detection_inference(args.det_config, args.det_checkpoint,
-                                         frame_paths, args.det_score_thr,
-                                         args.det_cat_id, args.device)
-    torch.cuda.empty_cache()
+    # # Get Human detection results.
+    # det_results, _ = detection_inference(args.det_config, args.det_checkpoint,
+    #                                      frame_paths, args.det_score_thr,
+    #                                      args.det_cat_id, args.device)
+    # torch.cuda.empty_cache()
 
-    # Get Pose estimation results.
-    pose_results, pose_data_samples = pose_inference(args.pose_config,
-                                                     args.pose_checkpoint,
-                                                     frame_paths, det_results,
-                                                     args.device)
+    # # Get Pose estimation results.
+    # pose_results, pose_data_samples = pose_inference(args.pose_config,
+    #                                                  args.pose_checkpoint,
+    #                                                  frame_paths, det_results,
+    #                                                  args.device)
     torch.cuda.empty_cache()
+    import pickle
+    # with open('pose_results.pkl', 'wb') as f:
+    #     pickle.dump(pose_results, f)
+    with open('pose_results.pkl', 'rb') as f:
+        pose_results = pickle.load(f)
 
     config = mmengine.Config.fromfile(args.config)
     config.merge_from_dict(args.cfg_options)
 
     model = init_recognizer(config, args.checkpoint, args.device)
+    # print model
+    # print(model)
     result = inference_skeleton(model, pose_results, (h, w))
 
     max_pred_index = result.pred_scores.item.argmax().item()
     label_map = [x.strip() for x in open(args.label_map).readlines()]
     action_label = label_map[max_pred_index]
-
-    visualize(args, frames, pose_data_samples, action_label)
+    print('Predicted action label:', action_label)
+    # visualize(args, frames, pose_data_samples, action_label)
 
     tmp_dir.cleanup()
 

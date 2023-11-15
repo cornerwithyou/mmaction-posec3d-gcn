@@ -218,7 +218,7 @@ class Bottleneck3d(BaseModule):
         super().__init__(init_cfg=init_cfg)
         assert style in ['pytorch', 'caffe']
         assert inflate_style in ['3x1x1', '3x3x3']
-
+        # conv_cfg['type'] = "sp"
         self.inplanes = inplanes
         self.planes = planes
         self.spatial_stride = spatial_stride
@@ -261,7 +261,6 @@ class Bottleneck3d(BaseModule):
             conv1_padding = (0, 0, 0)
             conv2_kernel_size = (1, 3, 3)
             conv2_padding = (0, dilation, dilation)
-
         self.conv1 = ConvModule(
             inplanes,
             planes,

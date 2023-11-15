@@ -24,12 +24,14 @@ from .uniformer import UniFormer
 from .uniformerv2 import UniFormerV2
 from .vit_mae import VisionTransformer
 from .x3d import X3D
-
+from .focal import spfocal
+from .sp_resnet3d_slowonly import sp_ResNet3dSlowOnly
+from .spresnet3d import spResNet3d
 __all__ = [
     'AAGCN', 'C2D', 'C3D', 'MViT', 'MobileNetV2', 'MobileNetV2TSM',
     'OmniResNet', 'ResNet', 'ResNet2Plus1d', 'ResNet3d', 'ResNet3dCSN',
     'ResNet3dLayer', 'ResNet3dSlowFast', 'ResNet3dSlowOnly', 'ResNetAudio',
     'ResNetTIN', 'ResNetTSM', 'STGCN', 'SwinTransformer3D', 'TANet',
     'TimeSformer', 'UniFormer', 'UniFormerV2', 'VisionTransformer', 'X3D',
-    'RGBPoseConv3D'
+    'RGBPoseConv3D', 'spfocal','sp_ResNet3dSlowOnly','spResNet3d'
 ]

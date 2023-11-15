@@ -26,7 +26,7 @@ class GradCAM:
     def __init__(self,
                  model: nn.Module,
                  target_layer_name: str,
-                 colormap: str = 'viridis') -> None:
+                 colormap: str = 'rainbow') -> None:
         from ..models.recognizers import Recognizer2D, Recognizer3D
         if isinstance(model, Recognizer2D):
             self.is_recognizer2d = True
@@ -107,7 +107,7 @@ class GradCAM:
         score = torch.sum(score)
         score.backward()
 
-        imgs = torch.stack(inputs)
+        imgs = torch.stack(inputs) #if isinstance(inputs, tuple) else inputs.unsqueeze(0)
         if self.is_recognizer2d:
             # [batch_size, num_segments, 3, H, W]
             b, t, _, h, w = imgs.size()
@@ -182,7 +182,7 @@ class GradCAM:
         heatmap = self.colormap(localization_map.detach().numpy())
         heatmap = heatmap[..., :3]
         heatmap = torch.from_numpy(heatmap)
-        input_imgs = torch.stack(input_imgs)
+        input_imgs = torch.stack(input_imgs) #if input_imgs.shape[1]==17 else torch.stack(input_imgs)
         # Permute input imgs to [B, T, H, W, 3], like heatmap
         if self.is_recognizer2d:
             # Recognizer2D input (B, T, C, H, W)
@@ -191,11 +191,24 @@ class GradCAM:
             # Recognizer3D input (B', num_clips*num_crops, C, T, H, W)
             # B = B' * num_clips * num_crops
             curr_inp = input_imgs.view([-1] + list(input_imgs.size()[2:]))
+            #curr_inp = input_imgs#.view([-1] + list(input_imgs.size()[2:]))
             curr_inp = curr_inp.permute(0, 2, 3, 4, 1)
+
+        # 改一下合并17通道
+        curr_inp = curr_inp.sum(dim=-1, keepdim=True)
+        curr_inp = curr_inp.repeat(1, 1, 1, 1, 3)
+        curr_inp = curr_inp*0.5#/torch.norm(curr_inp, dim=(2,3), keepdim=True)
+
+        heatmap = F.interpolate(heatmap, scale_factor=(8.0, 8.0), mode='bicubic',dim=(2,3),align_corners=False)
+        heatmap = F.interpolate(heatmap, scale_factor=(1.0), mode='linear', dim=1,align_corners=False)
+        curr_inp = F.interpolate(curr_inp, scale_factor=(8.0, 8.0), mode='bicubic',dim=(2,3),align_corners=False)
+        curr_inp = F.interpolate(curr_inp, scale_factor=(1.0), mode='linear', dim=1,align_corners=False)
+
 
         # renormalize input imgs to [0, 1]
         curr_inp = curr_inp.cpu().float()
-        curr_inp /= 255.
+        #curr_inp =
+        #curr_inp /= 255.
 
         # alpha blending
         blended_imgs = alpha * heatmap + (1 - alpha) * curr_inp
